@@ -7,7 +7,6 @@
 
 // application deps
 #include <PubSubClient.h>
-#include <Adafruit_Sensor.h>
 
 // sensor defines
 #define SENSOR_PIN A0
