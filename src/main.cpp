@@ -8,23 +8,25 @@
 // application deps
 #include <PubSubClient.h>
 #include <Adafruit_Sensor.h>
-#include <DHT.h>
 
 // sensor defines
-#define DHTPIN 5
-#define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321
+#define SENSOR_PIN A0
 #define INTERVAL 15000
+#define ESP_LED 2
 
-const char* applicationUUID = "336066";
+const char* applicationUUID = "336141";
 const char* ssid = "resin-hotspot";
 const char* password = "resin-hotspot";
 const char* mqtt_server = "iot.eclipse.org";
 const char* TOPIC = "Wxec0cXgwgC9KwBK/sensors";
 
-char tmp[75];
-char hum[75];
+int sensorLow = 1023;
+int sensorHigh = 0;
+
 char chipId[100];
 char topic[100];
+char reading[100];
+
 bool new_reading = false;
 
 ESP8266WebServer httpServer(80);
@@ -32,13 +34,6 @@ ESP8266HTTPUpdateServer httpUpdater;
 WiFiClient espClient;
 PubSubClient client(espClient);
 long lastMsg = 0;
-char msg[50];
-
-// Initialize DHT sensor.
-// Note that older versions of this library took an optional third parameter to
-// tweak the timings for faster processors.  This parameter is no longer needed
-// as the current DHT reading algorithm adjusts itself to work on faster procs.
-DHT dht(DHTPIN, DHTTYPE);
 
 void reconnect() {
   if (client.connected()) {
@@ -62,24 +57,16 @@ void reconnect() {
 }
 
 void readSensor() {
-  // Reading temperature or humidity takes about 250 milliseconds!
-  // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
-  float h = dht.readHumidity();
-
-  // Read temperature as Celsius (the default)
-  //float t = dht.readTemperature();
-
-  // Read temperature as Fahrenheit (isFahrenheit = true)
-  float f = dht.readTemperature(true);
+  //read the input from A0 and store it in a variable
+  int sensorValue = analogRead(A0);
 
   // Check if any reads failed and exit early (to try again).
-  if (isnan(h) || isnan(f)) {
-    Serial.println("Failed to read from DHT sensor!");
+  if (isnan(sensorValue)) {
+    Serial.println("Failed to read from sensor!");
     return;
   }
 
-  dtostrf(h, 3, 1, hum);
-  dtostrf(f, 3, 1, tmp);
+  dtostrf(sensorValue, 3, 1, reading);
   new_reading = true;
 }
 
@@ -88,7 +75,7 @@ void transmit() {
 
   Serial.println("transmitting");
 
-  snprintf(payload, 375, "{\"temperature\": %s, \"humidity\": %s, \"device\": {\"id\": \"%s\"}, \"apiVersion\": \"2.0.0\"}", tmp, hum, chipId);
+  snprintf(payload, 375, "{\"type\": \"float\", \"kind\": \"lightlevel\", \"value\": %s, \"device\": {\"id\": \"%s\"}, \"apiVersion\": \"3.0.0\"}", reading, chipId);
 
   Serial.print(topic);
   Serial.print(" ");
@@ -114,9 +101,10 @@ void setup(void) {
   Serial.println(topic);
 
   pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(2, OUTPUT);
+  pinMode(ESP_LED, OUTPUT);
+  pinMode(SENSOR_PIN, INPUT);
   digitalWrite(LED_BUILTIN, HIGH);
-  digitalWrite(2, HIGH);
+  digitalWrite(ESP_LED, LOW); // LOW is ON
 
   WiFi.setAutoConnect(true);
   WiFi.setAutoReconnect(true);
@@ -130,6 +118,24 @@ void setup(void) {
     Serial.print(".");
   }
   Serial.println("\nConnected to gateway");
+
+  // calibrate for the first five seconds after program runs
+  Serial.println("Calibrating sensor...");
+  while (millis() < 5000) {
+    // record the maximum sensor value
+    int sensorValue = analogRead(SENSOR_PIN);
+    if (sensorValue > sensorHigh) {
+      sensorHigh = sensorValue;
+    }
+    // record the minimum sensor value
+    if (sensorValue < sensorLow) {
+      sensorLow = sensorValue;
+    }
+  }
+
+  // turn the LED off, signaling the end of the calibration period
+  Serial.println("Calibration complete");
+  digitalWrite(ESP_LED, HIGH);
 
   // set up mqtt stuff
   client.setServer(mqtt_server, 1883);
@@ -169,3 +175,4 @@ void loop(void) {
 
   httpServer.handleClient();
 }
+
