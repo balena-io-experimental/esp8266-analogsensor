@@ -76,7 +76,7 @@ void transmit() {
 
   Serial.println("transmitting");
 
-  snprintf(payload, 88, "{\"type\":\"float\",\"value\":%s,\"device\":{\"id\":\"%s\"},\"apiVersion\":\"3.0.0\"}", reading, chipId);
+  snprintf(payload, 88, "{\"kind\":\"lightlevel\",\"value\":%s,\"device\":{\"id\":\"%s\"},\"apiVersion\":\"3.0.0\"}", reading, chipId);
 
   Serial.print(topic);
   Serial.print(" ");
