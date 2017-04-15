@@ -34,9 +34,9 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 long lastMsg = 0;
 
-void reconnect() {
+bool reconnect() {
   if (client.connected()) {
-    return;
+    return true;
   }
 
   Serial.print("Attempting MQTT connection...");
@@ -48,11 +48,13 @@ void reconnect() {
   // Attempt to connect
   if (client.connect(clientId.c_str())) {
     Serial.println("Connected to MQTT gateway");
-    return;
+    return true;
   }
 
   Serial.print("failed, rc=");
   Serial.print(client.state());
+
+  return false;
 }
 
 void readSensor() {
@@ -70,11 +72,11 @@ void readSensor() {
 }
 
 void transmit() {
-  char payload[375];
+  char payload[88];
 
   Serial.println("transmitting");
 
-  snprintf(payload, 375, "{\"type\": \"float\", \"kind\": \"lightlevel\", \"value\": %s, \"device\": {\"id\": \"%s\"}, \"apiVersion\": \"3.0.0\"}", reading, chipId);
+  snprintf(payload, 88, "{\"type\":\"float\",\"value\":%s,\"device\":{\"id\":\"%s\"},\"apiVersion\":\"3.0.0\"}", reading, chipId);
 
   Serial.print(topic);
   Serial.print(" ");
@@ -102,8 +104,9 @@ void setup(void) {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(ESP_LED, OUTPUT);
   pinMode(SENSOR_PIN, INPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
-  digitalWrite(ESP_LED, LOW); // LOW is ON
+
+  digitalWrite(LED_BUILTIN, LOW);
+  digitalWrite(ESP_LED, HIGH); // LOW is ON
 
   WiFi.setAutoConnect(true);
   WiFi.setAutoReconnect(true);
@@ -134,7 +137,7 @@ void setup(void) {
 
   // turn the LED off, signaling the end of the calibration period
   Serial.println("Calibration complete");
-  digitalWrite(ESP_LED, HIGH);
+  digitalWrite(LED_BUILTIN, HIGH);
 
   // set up mqtt stuff
   client.setServer(mqtt_server, 1883);
@@ -146,24 +149,27 @@ void setup(void) {
   httpServer.begin();
 
   reconnect();
-
 }
 
 void loop(void) {
   if (WiFi.isConnected() == true) {
-    digitalWrite(2, LOW);
+    digitalWrite(ESP_LED, LOW);
   } else {
     // turn the LED off
-    digitalWrite(2, HIGH);
+    digitalWrite(ESP_LED, HIGH);
   }
 
   if (new_reading == true) {
     // only try to reconnect when there's a new reading
-    digitalWrite(LED_BUILTIN, LOW);
-    delay(100);
-    reconnect();
-    digitalWrite(LED_BUILTIN, HIGH);
-    transmit();
+    if (reconnect()) {
+      digitalWrite(LED_BUILTIN, LOW);
+      delay(100);
+      transmit();
+      digitalWrite(LED_BUILTIN, HIGH);
+    } else {
+      Serial.println("failed to reconnect");
+      new_reading = false;
+    }
   }
 
   long now = millis();
